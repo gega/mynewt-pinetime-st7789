@@ -3,8 +3,8 @@
 Simple no frills driver for Apache Mynewt. Design goals:
 
 - small footprint
-- nonblocking SPI to support
-- almost no cost decompression
+- nonblocking SPI
+- almost free decompression
 - partial updates for icons
 - basic line drawing
 - no heap usage
