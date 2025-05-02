@@ -1,0 +1,8 @@
+pkg.name: hw/drivers/display/pinetime_st7789
+pkg.type: lib
+
+pkg.deps:
+    - "@apache-mynewt-core/hw/drivers/flash/spiflash"
+    - "@apache-mynewt-core/hw/hal"
+    - "@apache-mynewt-core/sys/sysinit"
+    - "@apache-mynewt-core/sys/log/stub"
