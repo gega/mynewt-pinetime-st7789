@@ -17,6 +17,7 @@
 
 #include "nrfx/hal/nrf_spi.h"
 
+
 #ifndef ARRAY_SIZE
 #define ARRAY_SIZE(x) ((sizeof x) / (sizeof *x))
 #endif
@@ -31,15 +32,12 @@
 
 #define LCD_SPI_BUS  (0)
 
-#define ASYNC_SPI_DATA
-#define ASYNC_FEED
-
-#define OFFS_OPCODE (2)
 #define OFFS_DELAY  (0)
 #define OFFS_LEN    (1)
+#define OFFS_OPCODE (2)
 #define OFFS_PARAM  (3)
 
-#define HEADER_SIZE (3) /* opcode, delay, argc */
+#define HEADER_SIZE (3) /* delay, argc, opcode */
 
 #define ST7789_2(o,d) 			d,0,o
 #define ST7789_3(o,d,p1) 		d,1,o,p1
@@ -122,11 +120,12 @@
 #define SCR_WIDTH PINETIME_ST7789_SCR_WIDTH
 #define SCR_HEIGHT PINETIME_ST7789_SCR_HEIGHT
 
+
 const uint8_t init_seq[]=
 {
-  //     opcode		delay	parameters
+  //     opcode		delay	parameters						bitfields
   ST7789(OP_SWRESET,	200),
-  ST7789(OP_CMD2EN,	0,	0x5a,0x69,0x02,0x01), 					/* C; C; C; EN[0] */
+  ST7789(OP_CMD2EN,	0,	0x5a,0x69,0x02,0x01), 					/* C; C; C; EN(0) */
   ST7789(OP_SLPOUT,	200),
   ST7789(OP_COLMOD,	0,	0x55),							/* RGBicf(65k) CICF(16bit) */
   ST7789(OP_MADCTL,	0,	0x00),							/* MY(t2b) MX(l2r) MV(n) ML(t2b) RGB(rgb) MH(l2r) */
@@ -148,8 +147,11 @@ const uint8_t init_seq[]=
 };
 static struct os_sem mu_busy;
 static int inited=0;
+
+_Static_assert(PINETIME_ST7789_BUFFER_SIZE%2==0, "Internal buffer size should be even");
 static uint16_t line_buf[2][PINETIME_ST7789_BUFFER_SIZE/2]; /* should be PINETIME_ST7789_BUFFER_SIZE bytes */
-static volatile int lift_cs=1;
+static volatile int lift_cs=0;
+static int sleep_mode;
 
 
 static void txrx_cb(void *arg, int len)
@@ -180,7 +182,7 @@ static int spi_init(void)
   ret|=hal_gpio_init_out(LCD_CHIP_SELECT_PIN, 1);
   ret|=hal_spi_disable(LCD_SPI_BUS);
   ret|=hal_spi_config(LCD_SPI_BUS, &sst);
-  hal_spi_set_txrx_cb(LCD_SPI_BUS, txrx_cb, NULL);
+  ret|=hal_spi_set_txrx_cb(LCD_SPI_BUS, txrx_cb, NULL);
   ret|=hal_spi_enable(LCD_SPI_BUS);
 
   return(ret);
@@ -190,13 +192,13 @@ static void spi_deinit(void)
 {
   hal_spi_abort(LCD_SPI_BUS);
   os_sem_pend(&mu_busy, 10);
+  os_sem_release(&mu_busy);
   hal_gpio_write(LCD_CHIP_SELECT_PIN, 1);
   hal_spi_disable(LCD_SPI_BUS);
   hal_gpio_deinit(LCD_CHIP_SELECT_PIN);
-  os_sem_release(&mu_busy);
 }
 
-#ifdef ASYNC_SPI_DATA
+_Static_assert(PINETIME_ST7789_BUFFER_SIZE<=PINETIME_ST7789_MAXTRANSFER, "Internal buffer cannot be larger than MAXTRANSFER unit");
 static int spi_data(const uint8_t *buf, int len, bool copy)
 {
   int ret=0;
@@ -206,7 +208,6 @@ static int spi_data(const uint8_t *buf, int len, bool copy)
   {
     int rm=(len % PINETIME_ST7789_BUFFER_SIZE);
     int nt=(len / PINETIME_ST7789_BUFFER_SIZE) + !!rm;
-    int i;
     uint8_t *bf=(uint8_t *)buf;
     int chunk=(rm==0 ? PINETIME_ST7789_BUFFER_SIZE : rm);
 
@@ -214,7 +215,7 @@ static int spi_data(const uint8_t *buf, int len, bool copy)
     lift_cs=0;
     hal_gpio_write(LCD_WRITE_PIN, 1);
     hal_gpio_write(LCD_CHIP_SELECT_PIN, 0);
-    for(i=0; i<nt; i++)
+    for(int i=0; i<nt; i++)
     {
       if(copy)
       {
@@ -229,25 +230,9 @@ static int spi_data(const uint8_t *buf, int len, bool copy)
       chunk=PINETIME_ST7789_BUFFER_SIZE;
     }
   }
-  return(ret);
-}
-#else
-static int spi_data(const uint8_t *buf, int len, bool copy)
-{
-  int ret=0;
 
-  if(len>0)
-  {
-    os_sem_pend(&mu_busy, OS_TIMEOUT_NEVER);
-    hal_gpio_write(LCD_WRITE_PIN, 1);
-    hal_gpio_write(LCD_CHIP_SELECT_PIN, 0);
-    ret=hal_spi_txrx(LCD_SPI_BUS, (uint8_t *)buf, NULL, len);
-    hal_gpio_write(LCD_CHIP_SELECT_PIN, 1);
-    os_sem_release(&mu_busy);
-  }
   return(ret);
 }
-#endif
 
 static int spi_data_feed(int len, uint8_t (*next_chunk_cb(uint8_t*,int*,int)))
 {
@@ -257,24 +242,21 @@ static int spi_data_feed(int len, uint8_t (*next_chunk_cb(uint8_t*,int*,int)))
 
   if(len>0)
   {
-    os_sem_pend(&mu_busy, OS_TIMEOUT_NEVER);
+    spi_wait();
     hal_gpio_write(LCD_WRITE_PIN, 1);
     hal_gpio_write(LCD_CHIP_SELECT_PIN, 0);
-    os_sem_release(&mu_busy);
     while(len>0)
     {
+      chunk=0;
       buf=next_chunk_cb(NULL, &chunk, len);
-      if(chunk>PINETIME_ST7789_MAXTRANSFER) return(-1);
+      if(chunk<=0||chunk>PINETIME_ST7789_MAXTRANSFER||NULL==buf)
+      {
+        ret=-1;
+        break;
+      }
       os_sem_pend(&mu_busy, OS_TIMEOUT_NEVER);
-#ifdef ASYNC_FEED
       lift_cs=0;
       ret|=hal_spi_txrx_noblock(LCD_SPI_BUS, buf, NULL, chunk);
-#else
-      hal_gpio_write(LCD_CHIP_SELECT_PIN, 0);
-      ret|=hal_spi_txrx(LCD_SPI_BUS, buf, NULL, chunk);
-      hal_gpio_write(LCD_CHIP_SELECT_PIN, 1);
-      os_sem_release(&mu_busy);
-#endif
       len-=chunk;
     }
     spi_wait();
@@ -290,14 +272,13 @@ static int spi_cmd_param(const uint8_t *opcode, int argc, const uint8_t *param)
   
   if(NULL!=opcode)
   {
-    os_sem_pend(&mu_busy, OS_TIMEOUT_NEVER);
+    spi_wait();
     hal_gpio_write(LCD_WRITE_PIN, 0);
     hal_gpio_write(LCD_CHIP_SELECT_PIN, 0);
     ret|=hal_spi_txrx(LCD_SPI_BUS, (uint8_t *)opcode, NULL, 1);
     hal_gpio_write(LCD_WRITE_PIN, 1);
     if(argc>0&&NULL!=param) ret|=hal_spi_txrx(LCD_SPI_BUS, (uint8_t *)param, NULL, argc);
     hal_gpio_write(LCD_CHIP_SELECT_PIN, 1);
-    os_sem_release(&mu_busy);
   }
   
   return(ret);
@@ -405,22 +386,6 @@ void pinetime_st7789_capabilities(struct pinetime_st7789_capabilities *cap)
   }
 }
 
-void pinetime_st7789_put_lines(const uint8_t *rgb565buffer, int y, int line_cnt)
-{
-  uint8_t set_window[]=
-  {
-    //        opcode	delay	parameters
-    ST7789(OP_CASET,	0,	0, 0x00, (SCR_WIDTH-1)>>8,  (SCR_WIDTH-1)&0xff ),
-    ST7789(OP_RASET,	0,	0, y, 0, y+line_cnt-1 ),
-    ST7789(OP_RAMWR,    0),
-  };
-  if(inited)
-  {
-    send_seq(set_window, sizeof(set_window));
-    spi_data(rgb565buffer, line_cnt*SCR_WIDTH*2, false);
-  }
-}
-
 void pinetime_st7789_put_icon(const uint8_t *rgb565buffer, int x, int y, int w, int h)
 {
   uint8_t set_window[]=
@@ -456,14 +421,19 @@ void pinetime_st7789_stream_icon(next_chunk_cb_t next_chunk, int x, int y, int w
 static uint8_t *ncc(uint8_t *buf, int *chunk, int remaining_len)
 {
   static uint8_t *b;
+  static int buflen;
   uint8_t *ret=NULL;
 
   if(NULL!=chunk)
   {
-    *chunk=MIN(sizeof(line_buf[0]),remaining_len);
+    *chunk=MIN(buflen, remaining_len);
     ret=b;
   }
-  else b=buf;
+  else
+  {
+    b=buf;
+    buflen=remaining_len;
+  }
 
   return(ret);
 }
@@ -549,12 +519,11 @@ void pinetime_st7789_fill_rect(uint8_t r, uint8_t g, uint8_t b, int x, int y, in
     ST7789(OP_RASET,	0,	0, y, 0, y+h-1 ),
     ST7789(OP_RAMWR,    0),
   };
-  int i;
 
   if(inited&&w>0&&h>0&&x>=0&&y>=0&&x<SCR_WIDTH&&y<SCR_HEIGHT&&(w+x)<=SCR_WIDTH&&(h+y)<=SCR_WIDTH)
   {
-    for(i=0; i<ARRAY_SIZE(line_buf[0]); i++) line_buf[0][i]=RGB_TO_RGB565LE(r,g,b);
-    ncc((uint8_t *)line_buf[0], NULL, 0);
+    for(int i=0; i<ARRAY_SIZE(line_buf[0]); i++) line_buf[0][i]=RGB_TO_RGB565LE(r,g,b);
+    ncc((uint8_t *)line_buf[0], NULL, sizeof(line_buf[0]));
     send_seq(set_window, sizeof(set_window));
     spi_data_feed(2*w*h, ncc);
   }
@@ -573,4 +542,34 @@ void pinetime_st7789_clear(void)
 void pinetime_st7789_wait_for_transfer(void)
 {
   spi_wait();
+}
+
+void pinetime_st7789_sleep(int en)
+{
+  static const uint8_t sleep[]=
+  {
+    //        opcode	delay	parameters
+    ST7789(OP_SLPIN,	126),
+  };
+  static const uint8_t wakeup[]=
+  {
+    //        opcode	delay	parameters
+    ST7789(OP_SLPOUT,	6),
+    ST7789(OP_VSCRSADD, 0,	0, 0),
+    ST7789(OP_DISPON,   0),
+  };
+  if(en!=sleep_mode)
+  {
+    if(en)
+    {
+      // sleep
+      DELAY(120);
+      send_seq(sleep, sizeof(sleep));
+    }
+    else
+    {
+      // wakeup
+      send_seq(wakeup, sizeof(wakeup));
+    }
+  }
 }
