@@ -64,34 +64,56 @@ static void maintask(void *arg)
   pinetime_st7789_stream_frame(next, len);
 }
 ```
-## Building
+## Building with Newt
 
-```
+You can build and load the driver using the Apache Mynewt newt tool. Here's a basic setup flow:
+```sh
 newt new lcdtest
 cd lcdtest
 newt upgrade
+```
+Create bootloader target:
+```sh
 newt target create boot-pinetime
 newt target set boot-pinetime app=@mcuboot/boot/mynewt
 newt target set boot-pinetime bsp=@apache-mynewt-core/hw/bsp/pinetime
 newt target set boot-pinetime build_profile=optimized
+```
+Create app target:
+```sh
 newt target create lcdtest-pinetime
-pushd apps
-cp -ax blinky/ lcdtest
-# edit pkg.yml
-#   add these:
-#      - "@mynewt-pinetime-st7789/hw/drivers/display/pinetime_st7789"
-#      - "@apache-mynewt-core/hw/drivers/flash/spiflash"
-# edit main.c to have some driver API calls
-popd
 newt target set lcdtest-pinetime app=apps/lcdtest
 newt target set lcdtest-pinetime bsp=@apache-mynewt-core/hw/bsp/pinetime
 newt target set lcdtest-pinetime build_profile=debug
-pushd repos
-git clone git@github.com:gega/mynewt-pinetime-st7789.git
+```
+Clone this driver:
+```sh
+cd repos
+git clone https://github.com/gega/mynewt-pinetime-st7789.git
+cd ..
+```
+Update apps/lcdtest/pkg.yml and add these dependencies:
+```yaml
+pkg.deps:
+    - "@mynewt-pinetime-st7789/hw/drivers/display/pinetime_st7789"
+    - "@apache-mynewt-core/hw/drivers/flash/spiflash"
+```
+Then build and flash:
+```sh
 newt build boot-pinetime
 newt build lcdtest-pinetime
-newt create-image lcdtest-pinetime 1.0.0
 newt create-image boot-pinetime 1.0.0
+newt create-image lcdtest-pinetime 1.0.0
 newt load boot-pinetime
 newt load lcdtest-pinetime
+```
+
+## Repository Structure
+
+```
+mynewt-pinetime-st7789/
+└── hw/
+    └── drivers/
+        └── display/
+            └── pinetime_st7789/
 ```
