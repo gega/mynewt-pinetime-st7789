@@ -510,6 +510,29 @@ void pinetime_st7789_draw_line(uint8_t r, uint8_t g, uint8_t b, int x0, int y0, 
   } while(1);
 }
 
+void pinetime_st7789_draw_horiz_line(uint8_t r, uint8_t g, uint8_t b, int y, int x0, int x1)
+{
+  uint8_t set_window[]=
+  {
+    //        opcode	delay	parameters
+    ST7789(OP_CASET,	0,	0, x0, 0, x1-1 ),
+    ST7789(OP_RASET,	0,	0, y, 0, y ),
+    ST7789(OP_RAMWR,    0),
+  };
+  uint16_t col=RGB_TO_RGB565LE(r,g,b);
+  
+  if(x1==x0) return;
+  if(x0>x1) { int t=x0; x0=x1; x1=t; }
+  if(inited)
+  {
+    int blen=MIN(ARRAY_SIZE(line_buf[0]),2*(x1-x0));
+    for(int i=0; i<blen; i++) line_buf[0][i]=col;
+    ncc((uint8_t *)line_buf[0], NULL, blen);
+    send_seq(set_window, sizeof(set_window));
+    spi_data_feed(2*(x1-x0), ncc);
+  }  
+}
+
 void pinetime_st7789_fill_rect(uint8_t r, uint8_t g, uint8_t b, int x, int y, int w, int h)
 {
   uint8_t set_window[]=

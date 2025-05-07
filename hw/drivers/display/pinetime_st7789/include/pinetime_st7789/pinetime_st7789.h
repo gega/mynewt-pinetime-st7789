@@ -65,6 +65,7 @@ void pinetime_st7789_deinit(void);
 void pinetime_st7789_put_frame(const uint8_t *rgb565img);
 void pinetime_st7789_stream_frame(next_chunk_cb_t next_chunk, int len);
 void pinetime_st7789_draw_line(uint8_t r, uint8_t g, uint8_t b, int x0, int y0, int x1, int y1);
+void pinetime_st7789_draw_horiz_line(uint8_t r, uint8_t g, uint8_t b, int y, int x0, int x1);
 void pinetime_st7789_fill_rect(uint8_t r, uint8_t g, uint8_t b, int x, int y, int w, int h);
 void pinetime_st7789_put_icon(const uint8_t *rgb565buffer, int x, int y, int w, int h);
 void pinetime_st7789_stream_icon(next_chunk_cb_t next_chunk, int x, int y, int w, int h);
