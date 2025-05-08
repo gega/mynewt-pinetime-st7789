@@ -121,7 +121,7 @@
 #define SCR_HEIGHT PINETIME_ST7789_SCR_HEIGHT
 
 
-const uint8_t init_seq[]=
+static const uint8_t init_seq[]=
 {
   //     opcode		delay	parameters						bitfields
   ST7789(OP_SWRESET,	200),
@@ -223,7 +223,7 @@ static int spi_data_copy(const uint8_t *buf, int len)
       os_sem_pend(&mu_busy, OS_TIMEOUT_NEVER);
       if(i>=nt) lift_cs=1;
       ret|=hal_spi_txrx_noblock(LCD_SPI_BUS, bf, NULL, chunk);
-      buf+=chunk;
+      bf+=chunk;
       chunk=PINETIME_ST7789_BUFFER_SIZE;
     }
   }
@@ -251,28 +251,9 @@ static int spi_data_nocopy(const uint8_t *buf, int len)
       os_sem_pend(&mu_busy, OS_TIMEOUT_NEVER);
       if(i>=nt) lift_cs=1;
       ret|=hal_spi_txrx_noblock(LCD_SPI_BUS, bf, NULL, chunk);
-      buf+=chunk;
+      bf+=chunk;
       chunk=PINETIME_ST7789_MAXTRANSFER;
     }
-  }
-
-  return(ret);
-}
-
-static int spi_data_oneshot(const uint8_t *buf, int len)
-{
-  int ret=0;
-
-  if(len>0&&len<=PINETIME_ST7789_MAXTRANSFER)
-  {
-    uint8_t *bf=(uint8_t *)buf;
-
-    spi_wait();
-    hal_gpio_write(LCD_WRITE_PIN, 1);
-    hal_gpio_write(LCD_CHIP_SELECT_PIN, 0);
-    lift_cs=1;
-    os_sem_pend(&mu_busy, OS_TIMEOUT_NEVER);
-    ret|=hal_spi_txrx_noblock(LCD_SPI_BUS, bf, NULL, len);
   }
 
   return(ret);
@@ -560,7 +541,7 @@ void pinetime_st7789_draw_horiz_line(uint8_t r, uint8_t g, uint8_t b, int y, int
   uint8_t set_window[]=
   {
     //        opcode	delay	parameters
-    ST7789(OP_CASET,	0,	0, x0, 0, x1-1 ),
+    ST7789(OP_CASET,	0,	0, x0, 0, x1 ),
     ST7789(OP_RASET,	0,	0, y, 0, y ),
     ST7789(OP_RAMWR,    0),
   };
@@ -583,7 +564,7 @@ void pinetime_st7789_draw_horiz_tex(uint8_t *tex, int y, int x0, int x1)
   uint8_t set_window[]=
   {
     //        opcode	delay	parameters
-    ST7789(OP_CASET,	0,	0, x0, 0, x1-1 ),
+    ST7789(OP_CASET,	0,	0, x0, 0, x1 ),
     ST7789(OP_RASET,	0,	0, y, 0, y ),
     ST7789(OP_RAMWR,    0),
   };
@@ -593,7 +574,7 @@ void pinetime_st7789_draw_horiz_tex(uint8_t *tex, int y, int x0, int x1)
   if(inited)
   {
     send_seq(set_window, sizeof(set_window));
-    spi_data_oneshot(tex, 2*(x1-x0));
+    spi_data_nocopy(tex, 2*(x1-x0+1));
   }  
 }
 
