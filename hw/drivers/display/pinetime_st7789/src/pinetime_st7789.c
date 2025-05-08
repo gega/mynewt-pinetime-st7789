@@ -199,7 +199,7 @@ static void spi_deinit(void)
 }
 
 _Static_assert(PINETIME_ST7789_BUFFER_SIZE<=PINETIME_ST7789_MAXTRANSFER, "Internal buffer cannot be larger than MAXTRANSFER unit");
-static int spi_data(const uint8_t *buf, int len, bool copy)
+static int spi_data_copy(const uint8_t *buf, int len)
 {
   int ret=0;
   int bsel=0;
@@ -217,18 +217,62 @@ static int spi_data(const uint8_t *buf, int len, bool copy)
     hal_gpio_write(LCD_CHIP_SELECT_PIN, 0);
     for(int i=0; i<nt; i++)
     {
-      if(copy)
-      {
-        bsel^=1;
-        bf=(uint8_t *)line_buf[bsel];
-        memcpy(bf, buf, chunk);
-      }
+      bsel^=1;
+      bf=(uint8_t *)line_buf[bsel];
+      memcpy(bf, buf, chunk);
       os_sem_pend(&mu_busy, OS_TIMEOUT_NEVER);
       if(i>=nt) lift_cs=1;
       ret|=hal_spi_txrx_noblock(LCD_SPI_BUS, bf, NULL, chunk);
       buf+=chunk;
       chunk=PINETIME_ST7789_BUFFER_SIZE;
     }
+  }
+
+  return(ret);
+}
+
+static int spi_data_nocopy(const uint8_t *buf, int len)
+{
+  int ret=0;
+
+  if(len>0)
+  {
+    int rm=(len % PINETIME_ST7789_MAXTRANSFER);
+    int nt=(len / PINETIME_ST7789_MAXTRANSFER) + !!rm;
+    uint8_t *bf=(uint8_t *)buf;
+    int chunk=(rm==0 ? PINETIME_ST7789_MAXTRANSFER : rm);
+
+    spi_wait();
+    lift_cs=0;
+    hal_gpio_write(LCD_WRITE_PIN, 1);
+    hal_gpio_write(LCD_CHIP_SELECT_PIN, 0);
+    for(int i=0; i<nt; i++)
+    {
+      os_sem_pend(&mu_busy, OS_TIMEOUT_NEVER);
+      if(i>=nt) lift_cs=1;
+      ret|=hal_spi_txrx_noblock(LCD_SPI_BUS, bf, NULL, chunk);
+      buf+=chunk;
+      chunk=PINETIME_ST7789_MAXTRANSFER;
+    }
+  }
+
+  return(ret);
+}
+
+static int spi_data_oneshot(const uint8_t *buf, int len)
+{
+  int ret=0;
+
+  if(len>0&&len<=PINETIME_ST7789_MAXTRANSFER)
+  {
+    uint8_t *bf=(uint8_t *)buf;
+
+    spi_wait();
+    hal_gpio_write(LCD_WRITE_PIN, 1);
+    hal_gpio_write(LCD_CHIP_SELECT_PIN, 0);
+    lift_cs=1;
+    os_sem_pend(&mu_busy, OS_TIMEOUT_NEVER);
+    ret|=hal_spi_txrx_noblock(LCD_SPI_BUS, bf, NULL, len);
   }
 
   return(ret);
@@ -328,7 +372,7 @@ void pinetime_st7789_put_frame(const uint8_t *rgb565img)
   if(inited)
   {
     send_seq(set_window, sizeof(set_window));
-    spi_data(rgb565img, (SCR_WIDTH*SCR_HEIGHT)*2, true);
+    spi_data_copy(rgb565img, (SCR_WIDTH*SCR_HEIGHT)*2);
   }
 }
 
@@ -386,7 +430,7 @@ void pinetime_st7789_capabilities(struct pinetime_st7789_capabilities *cap)
   }
 }
 
-void pinetime_st7789_put_icon(const uint8_t *rgb565buffer, int x, int y, int w, int h)
+void pinetime_st7789_put_icon(const uint8_t *rgb565buffer, int x, int y, int w, int h, int copytoram)
 {
   uint8_t set_window[]=
   {
@@ -398,7 +442,8 @@ void pinetime_st7789_put_icon(const uint8_t *rgb565buffer, int x, int y, int w, 
   if(inited)
   {
     send_seq(set_window, sizeof(set_window));
-    spi_data(rgb565buffer, w*h*2, true);
+    if(copytoram) spi_data_copy(rgb565buffer, w*h*2);
+    else spi_data_nocopy(rgb565buffer, w*h*2);
   }
 }
 
@@ -530,6 +575,25 @@ void pinetime_st7789_draw_horiz_line(uint8_t r, uint8_t g, uint8_t b, int y, int
     ncc((uint8_t *)line_buf[0], NULL, blen);
     send_seq(set_window, sizeof(set_window));
     spi_data_feed(2*(x1-x0), ncc);
+  }  
+}
+
+void pinetime_st7789_draw_horiz_tex(uint8_t *tex, int y, int x0, int x1)
+{
+  uint8_t set_window[]=
+  {
+    //        opcode	delay	parameters
+    ST7789(OP_CASET,	0,	0, x0, 0, x1-1 ),
+    ST7789(OP_RASET,	0,	0, y, 0, y ),
+    ST7789(OP_RAMWR,    0),
+  };
+  
+  if(x1==x0) return;
+  if(x0>x1) { int t=x0; x0=x1; x1=t; }
+  if(inited)
+  {
+    send_seq(set_window, sizeof(set_window));
+    spi_data_oneshot(tex, 2*(x1-x0));
   }  
 }
 
