@@ -149,7 +149,7 @@ static struct os_sem mu_busy;
 static int inited=0;
 
 _Static_assert(PINETIME_ST7789_BUFFER_SIZE%2==0, "Internal buffer size should be even");
-static uint16_t line_buf[2][PINETIME_ST7789_BUFFER_SIZE/2]; /* should be PINETIME_ST7789_BUFFER_SIZE bytes */
+static uint16_t line_buf[2][PINETIME_ST7789_BUFFER_SIZE/sizeof(uint16_t)]; /* should be PINETIME_ST7789_BUFFER_SIZE bytes */
 static volatile int lift_cs=0;
 static int sleep_mode;
 
@@ -551,6 +551,7 @@ void pinetime_st7789_draw_horiz_line(uint8_t r, uint8_t g, uint8_t b, int y, int
   if(inited)
   {
     int blen=MIN(ARRAY_SIZE(line_buf[0]),2*(x1-x0));
+    spi_wait();
     for(int i=0; i<blen; i++) line_buf[0][i]=col;
     ncc((uint8_t *)line_buf[0], NULL, blen);
     send_seq(set_window, sizeof(set_window));
@@ -589,6 +590,7 @@ void pinetime_st7789_fill_rect(uint8_t r, uint8_t g, uint8_t b, int x, int y, in
 
   if(inited&&w>0&&h>0&&x>=0&&y>=0&&x<SCR_WIDTH&&y<SCR_HEIGHT&&(w+x)<=SCR_WIDTH&&(h+y)<=SCR_WIDTH)
   {
+    spi_wait();
     for(int i=0; i<ARRAY_SIZE(line_buf[0]); i++) line_buf[0][i]=RGB_TO_RGB565LE(r,g,b);
     ncc((uint8_t *)line_buf[0], NULL, sizeof(line_buf[0]));
     send_seq(set_window, sizeof(set_window));
