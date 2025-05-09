@@ -203,12 +203,12 @@ static int spi_data_copy(const uint8_t *buf, int len)
 {
   int ret=0;
   int bsel=0;
+  uint8_t *bf;
 
   if(len>0)
   {
     int rm=(len % PINETIME_ST7789_BUFFER_SIZE);
     int nt=(len / PINETIME_ST7789_BUFFER_SIZE) + !!rm;
-    uint8_t *bf=(uint8_t *)buf;
     int chunk=(rm==0 ? PINETIME_ST7789_BUFFER_SIZE : rm);
 
     spi_wait();
@@ -223,7 +223,7 @@ static int spi_data_copy(const uint8_t *buf, int len)
       os_sem_pend(&mu_busy, OS_TIMEOUT_NEVER);
       if(i>=nt) lift_cs=1;
       ret|=hal_spi_txrx_noblock(LCD_SPI_BUS, bf, NULL, chunk);
-      bf+=chunk;
+      buf+=chunk;
       chunk=PINETIME_ST7789_BUFFER_SIZE;
     }
   }
@@ -239,7 +239,6 @@ static int spi_data_nocopy(const uint8_t *buf, int len)
   {
     int rm=(len % PINETIME_ST7789_MAXTRANSFER);
     int nt=(len / PINETIME_ST7789_MAXTRANSFER) + !!rm;
-    uint8_t *bf=(uint8_t *)buf;
     int chunk=(rm==0 ? PINETIME_ST7789_MAXTRANSFER : rm);
 
     spi_wait();
@@ -250,8 +249,8 @@ static int spi_data_nocopy(const uint8_t *buf, int len)
     {
       os_sem_pend(&mu_busy, OS_TIMEOUT_NEVER);
       if(i>=nt) lift_cs=1;
-      ret|=hal_spi_txrx_noblock(LCD_SPI_BUS, bf, NULL, chunk);
-      bf+=chunk;
+      ret|=hal_spi_txrx_noblock(LCD_SPI_BUS, (uint8_t *)buf, NULL, chunk);
+      buf+=chunk;
       chunk=PINETIME_ST7789_MAXTRANSFER;
     }
   }
