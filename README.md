@@ -122,4 +122,4 @@ mynewt-pinetime-st7789/
 
 https://github.com/user-attachments/assets/e198a00d-b2b0-4b1a-beb6-43dda7f9212d
 
-_using the [ninety3d](https://github.com/gega/ninety3d) library_
+_using the [ninety3d](https://github.com/gega/ninety3d) and [sbuf](https://github.com/gega/sbuf)libraries_
