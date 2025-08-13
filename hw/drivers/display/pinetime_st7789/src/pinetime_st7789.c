@@ -410,6 +410,14 @@ void pinetime_st7789_capabilities(struct pinetime_st7789_capabilities *cap)
   }
 }
 
+void pinetime_st7789_send_data(const uint8_t *rgb565buffer, int len)
+{
+  if(inited)
+  {
+    spi_data_nocopy(rgb565buffer, len);
+  }
+}
+
 void pinetime_st7789_put_icon(const uint8_t *rgb565buffer, int x, int y, int w, int h, int copytoram)
 {
   uint8_t set_window[]=
@@ -424,6 +432,21 @@ void pinetime_st7789_put_icon(const uint8_t *rgb565buffer, int x, int y, int w, 
     send_seq(set_window, sizeof(set_window));
     if(copytoram) spi_data_copy(rgb565buffer, w*h*2);
     else spi_data_nocopy(rgb565buffer, w*h*2);
+  }
+}
+
+void pinetime_st7789_set_window(int x, int y, int w, int h)
+{
+  uint8_t set_window[]=
+  {
+    //        opcode	delay	parameters
+    ST7789(OP_CASET,	0,	0, x, 0, x+w-1 ),
+    ST7789(OP_RASET,	0,	0, y, 0, y+h-1 ),
+    ST7789(OP_RAMWR,    0),
+  };
+  if(inited)
+  {
+    send_seq(set_window, sizeof(set_window));
   }
 }
 

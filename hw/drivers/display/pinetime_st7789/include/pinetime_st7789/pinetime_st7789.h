@@ -78,5 +78,7 @@ void pinetime_st7789_put_pixel(int x, int y, uint8_t r, uint8_t g, uint8_t b);
 void pinetime_st7789_capabilities(struct pinetime_st7789_capabilities *cap);
 void pinetime_st7789_wait_for_transfer(void);
 void pinetime_st7789_sleep(int en);
+void pinetime_st7789_set_window(int x, int y, int w, int h);
+void pinetime_st7789_send_data(const uint8_t *rgb565buffer, int len);
 
 #endif
