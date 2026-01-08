@@ -55,7 +55,7 @@ static uint8_t *next(uint8_t *buf, int *chunk, int remaining_len)
 
 static void maintask(void *arg)
 {
-  pinetime_st7789_init();
+  pinetime_st7789_init(PINETIME_PXLFMT_RGB565);
   pinetime_st7789_clear();
   pinetime_st7789_brightness(PINETIME_BRIGHTNESS_HIGH);
 
