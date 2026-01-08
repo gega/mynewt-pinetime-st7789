@@ -19,6 +19,12 @@
  */
 #define RGB_TO_RGB565BE(r, g, b) (((((uint16_t)r) & 0xf8) << 8) | ((((uint16_t)g) & 0xfc) << 3) | (((uint16_t)b) >> 3))
 
+#define PINETIME_ST7789_CLAMP255(x) ((((x) > 255) ? 255 : (x))&0xff)
+#define RGB_TO_RGB444(r, g, b) ((( \
+    ((PINETIME_ST7789_CLAMP255((r) + 8) >> 4) << 8)  | \
+    ((PINETIME_ST7789_CLAMP255((g) + 8) >> 4) << 4)  | \
+    ((PINETIME_ST7789_CLAMP255((b) + 8) >> 4)) ) & 0x0fff) << 4)
+
 #define PINETIME_ST7789_BUFFER_SIZE (120) /* less or equal than PINETIME_ST7789_MAXTRANSFER and must be even */
 #define PINETIME_ST7789_MAXTRANSFER (252) /* max 255, nRF52 SPIM DMA limit */
 

@@ -579,12 +579,14 @@ void pinetime_st7789_draw_line(uint8_t r, uint8_t g, uint8_t b, int x0, int y0, 
   int sy = y0 < y1 ? 1 : -1;
   int error = (dx + dy)*100;
   int e2;
-  uint16_t col;
+  uint16_t col=0;
 
-  col=RGB_TO_RGB565LE(r,g,b);
+  if(inited==PINETIME_PXLFMT_RGB565) col=RGB_TO_RGB565LE(r,g,b);
+  if(inited==PINETIME_PXLFMT_RGB444) col=RGB_TO_RGB444(r,g,b);
   do
   {
-    pinetime_st7789_put_pixel_rgb565(x0, y0, col);
+    if(inited==PINETIME_PXLFMT_RGB565) pinetime_st7789_put_pixel_rgb565(x0, y0, col);
+    if(inited==PINETIME_PXLFMT_RGB444) pinetime_st7789_put_pixel_rgb444(x0, y0, col);
     e2 = (2 * error) / 100;
     if( e2 >= dy)
     {
@@ -610,19 +612,37 @@ void pinetime_st7789_draw_horiz_line(uint8_t r, uint8_t g, uint8_t b, int y, int
     ST7789(OP_RASET,	0,	0, y, 0, y ),
     ST7789(OP_RAMWR,    0),
   };
-  uint16_t col=RGB_TO_RGB565LE(r,g,b);
-  
+
   if(x1==x0) return;
   if(x0>x1) { int t=x0; x0=x1; x1=t; }
-  if(inited)
+  if(inited==PINETIME_PXLFMT_RGB565)
   {
+    uint16_t col=RGB_TO_RGB565LE(r,g,b);
+    
     int blen=MIN(ARRAY_SIZE(line_buf[0]),2*(x1-x0));
     spi_wait();
     for(int i=0; i<blen; i++) line_buf[0][i]=col;
     ncc((uint8_t *)line_buf[0], NULL, blen);
     send_seq(set_window, sizeof(set_window));
     spi_data_feed(2*(x1-x0), ncc);
-  }  
+  }
+  if(inited==PINETIME_PXLFMT_RGB444)
+  {
+    uint16_t col1=RGB_TO_RGB444(r,g,b);
+    uint16_t col2=RGB_TO_RGB444(r,g,b);
+    uint8_t pat[3]={ (col1>>8)&0xff, 0xff&(col1|col2>>12), col2&0xff };
+    int blen=MIN(sizeof(line_buf[0]),(3*(x1-x0))/2);
+    for(int i=0; i<blen; i+=3)
+    {
+      line_buf[0][i+0]=pat[0];
+      line_buf[0][i+1]=pat[1];
+      if((i+2)>=blen) break;
+      line_buf[0][i+2]=pat[2];
+    }
+    ncc((uint8_t *)line_buf[0], NULL, blen);
+    send_seq(set_window, sizeof(set_window));
+    spi_data_feed((3*(x1-x0))/2, ncc);
+  }
 }
 
 void pinetime_st7789_draw_horiz_tex(uint8_t *tex, int y, int x0, int x1)
@@ -640,7 +660,8 @@ void pinetime_st7789_draw_horiz_tex(uint8_t *tex, int y, int x0, int x1)
   if(inited)
   {
     send_seq(set_window, sizeof(set_window));
-    spi_data_nocopy(tex, 2*(x1-x0+1));
+    if(inited==PINETIME_PXLFMT_RGB565) spi_data_nocopy(tex, 2*(x1-x0+1));
+    if(inited==PINETIME_PXLFMT_RGB444) spi_data_nocopy(tex, (3*(x1-x0+1))/2);
   }  
 }
 
@@ -657,10 +678,30 @@ void pinetime_st7789_fill_rect(uint8_t r, uint8_t g, uint8_t b, int x, int y, in
   if(inited&&w>0&&h>0&&x>=0&&y>=0&&x<SCR_WIDTH&&y<SCR_HEIGHT&&(w+x)<=SCR_WIDTH&&(h+y)<=SCR_WIDTH)
   {
     spi_wait();
-    for(int i=0; i<ARRAY_SIZE(line_buf[0]); i++) line_buf[0][i]=RGB_TO_RGB565LE(r,g,b);
-    ncc((uint8_t *)line_buf[0], NULL, sizeof(line_buf[0]));
-    send_seq(set_window, sizeof(set_window));
-    spi_data_feed(2*w*h, ncc);
+    if(inited==PINETIME_PXLFMT_RGB565)
+    {
+      for(int i=0; i<ARRAY_SIZE(line_buf[0]); i++) line_buf[0][i]=RGB_TO_RGB565LE(r,g,b);
+      ncc((uint8_t *)line_buf[0], NULL, sizeof(line_buf[0]));
+      send_seq(set_window, sizeof(set_window));
+      spi_data_feed(2*w*h, ncc);
+    }
+    if(inited==PINETIME_PXLFMT_RGB444)
+    {
+      uint16_t col1=RGB_TO_RGB444(r,g,b);
+      uint16_t col2=RGB_TO_RGB444(r,g,b);
+      uint8_t pat[3]={ (col1>>8)&0xff, 0xff&(col1|col2>>12), col2&0xff };
+      int blen=MIN(sizeof(line_buf[0]),(3*(w))/2);
+      for(int i=0; i<blen; i+=3)
+      {
+        line_buf[0][i+0]=pat[0];
+        line_buf[0][i+1]=pat[1];
+        if((i+2)>=blen) break;
+        line_buf[0][i+2]=pat[2];
+      }
+      ncc((uint8_t *)line_buf[0], NULL, blen);
+      send_seq(set_window, sizeof(set_window));
+      spi_data_feed((3*(w))/2, ncc);
+    }
   }
 }
 
