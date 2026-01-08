@@ -35,7 +35,8 @@ _Static_assert(PINETIME_ST7789_BUFFER_SIZE%2==0, "Internal buffer size should be
 
 typedef enum pinetime_st7789_pixel_format
 {
-  PINETIME_PXLFMT_RGB565,
+  PINETIME_PXLFMT_RGB565 = 1,
+  PINETIME_PXLFMT_RGB444 = 2,
   PINETIME_PXLFMTEND
 } pinetime_st7789_pixel_format_t;
 
@@ -60,25 +61,26 @@ struct pinetime_st7789_capabilities
 
 typedef uint8_t *next_chunk_cb_t(uint8_t*,int*,int);
 
-void pinetime_st7789_init(void);
+void pinetime_st7789_init(pinetime_st7789_pixel_format_t pixel_format);
 void pinetime_st7789_deinit(void);
-void pinetime_st7789_put_frame(const uint8_t *rgb565img);
+void pinetime_st7789_put_frame(const uint8_t *rgb);
 void pinetime_st7789_stream_frame(next_chunk_cb_t next_chunk, int len);
 void pinetime_st7789_draw_line(uint8_t r, uint8_t g, uint8_t b, int x0, int y0, int x1, int y1);
 void pinetime_st7789_draw_horiz_line(uint8_t r, uint8_t g, uint8_t b, int y, int x0, int x1);
 void pinetime_st7789_draw_horiz_tex(uint8_t *tex, int y, int x0, int x1);
 void pinetime_st7789_fill_rect(uint8_t r, uint8_t g, uint8_t b, int x, int y, int w, int h);
-void pinetime_st7789_put_icon(const uint8_t *rgb565buffer, int x, int y, int w, int h, int copytoram);
+void pinetime_st7789_put_icon(const uint8_t *rgbbuffer, int x, int y, int w, int h, int copytoram);
 void pinetime_st7789_stream_icon(next_chunk_cb_t next_chunk, int x, int y, int w, int h);
 void pinetime_st7789_clear();
 void pinetime_st7789_fill(uint8_t r, uint8_t g, uint8_t b);
 void pinetime_st7789_brightness(pinetime_st7789_brightness_t brightness);
 void pinetime_st7789_put_pixel_rgb565(int x, int y, uint16_t rgb565);
+void pinetime_st7789_put_pixel_rgb444(int x, int y, uint16_t rgb565);
 void pinetime_st7789_put_pixel(int x, int y, uint8_t r, uint8_t g, uint8_t b);
 void pinetime_st7789_capabilities(struct pinetime_st7789_capabilities *cap);
 void pinetime_st7789_wait_for_transfer(void);
 void pinetime_st7789_sleep(int en);
 void pinetime_st7789_set_window(int x, int y, int w, int h);
-void pinetime_st7789_send_data(const uint8_t *rgb565buffer, int len);
+void pinetime_st7789_send_data(const uint8_t *rgbbuffer, int len);
 
 #endif

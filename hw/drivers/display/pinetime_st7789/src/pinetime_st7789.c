@@ -121,7 +121,7 @@
 #define SCR_HEIGHT PINETIME_ST7789_SCR_HEIGHT
 
 
-static const uint8_t init_seq[]=
+static const uint8_t init_seq_rgb565[]=
 {
   //     opcode		delay	parameters						bitfields
   ST7789(OP_SWRESET,	200),
@@ -145,6 +145,32 @@ static const uint8_t init_seq[]=
   ST7789(OP_DISPON,	0),
   ST7789(OP_IDMOFF,	50),
 };
+
+static const uint8_t init_seq_rgb444[]=
+{
+  //     opcode		delay	parameters						bitfields
+  ST7789(OP_SWRESET,	200),
+  ST7789(OP_CMD2EN,	0,	0x5a,0x69,0x02,0x01), 					/* C; C; C; EN(0) */
+  ST7789(OP_SLPOUT,	200),
+  ST7789(OP_COLMOD,	0,	0x53),							/* RGBicf(65k) CICF(16bit) */
+  ST7789(OP_MADCTL,	0,	0x00),							/* MY(t2b) MX(l2r) MV(n) ML(t2b) RGB(rgb) MH(l2r) */
+  ST7789(OP_CASET,	0,	0x00, 0x00, (SCR_WIDTH-1)>>8, (SCR_WIDTH-1)&0xff ),	/* SCR_WIDTH */
+  ST7789(OP_RASET,	0,	0x00, 0x00, (SCR_HEIGHT-1)>>8, (SCR_HEIGHT-1)&0xff ),	/* SCR_HEIGHT */
+  ST7789(OP_PORCTRL,	0,	0x02, 0x03, 0x01, 0xed, 0xed),				/* BPA(2); FPA(3); PSEN(1); BPB(14) FPB(13); BPC(14) FPC(13) */
+  ST7789(OP_FRCTRL2,	0,	0x0a),							/* NLA(dot) RTNA(72) */
+  ST7789(OP_FRCTRL1,	0,	0x00, 0x0a, 0x0a),					/* FRSEN(0) DV(0->div1); NLB(dot) RTNB(58); NLC(dot) RTNC(58) */
+  ST7789(OP_NORON,	0),
+  ST7789(OP_VDVS,	0,	0x10),							/* VDVS(-0.4) */
+  ST7789(OP_PWCTRL1,	0,	0xa4, 0x00),						/* C; AVDD(6.4) AVCL(-4.4) VDS(2.19) */
+  ST7789(OP_PWCTRL2,	0,	0x33),							/* SBCLK(/6) STP14CK(/6) */
+  ST7789(OP_GCTRL,	0,	0x00),							/* VGHS(12.20) VGLS(-7.16) */
+  ST7789(OP_EQCTRL,	0,	0x11, 0x11, 0x08),					/* sQ=SEQ(0x11); sP=SPRET(0x11); gQ=GEQ(0x08) */
+  ST7789(OP_PROMEN,	0,	0x5a, 0x69, 0xee, 0x00),				/* C; C; C; PROMEN(off) */
+  ST7789(OP_INVON,	0),
+  ST7789(OP_DISPON,	0),
+  ST7789(OP_IDMOFF,	50),
+};
+
 static struct os_sem mu_busy;
 static int inited=0;
 
@@ -238,8 +264,8 @@ static int spi_data_nocopy(const uint8_t *buf, int len)
   if(len>0)
   {
     int rm=(len % PINETIME_ST7789_MAXTRANSFER);
-    int nt=(len / PINETIME_ST7789_MAXTRANSFER) + !!rm;
-    int chunk=(rm==0 ? PINETIME_ST7789_MAXTRANSFER : rm);
+    int nt=(len / PINETIME_ST7789_MAXTRANSFER) + !!rm; // adjust the size when there's some remains in the last chunk
+    int chunk=(rm==0 ? PINETIME_ST7789_MAXTRANSFER : rm); // remainder goes first
 
     spi_wait();
     lift_cs=0;
@@ -248,7 +274,7 @@ static int spi_data_nocopy(const uint8_t *buf, int len)
     for(int i=0; i<nt; i++)
     {
       os_sem_pend(&mu_busy, OS_TIMEOUT_NEVER);
-      if(i>=nt) lift_cs=1;
+      if(i>=nt-1) lift_cs=1;
       ret|=hal_spi_txrx_noblock(LCD_SPI_BUS, (uint8_t *)buf, NULL, chunk);
       buf+=chunk;
       chunk=PINETIME_ST7789_MAXTRANSFER;
@@ -340,7 +366,7 @@ static void send_seq(const uint8_t *seq, int len)
   }
 }
 
-void pinetime_st7789_put_frame(const uint8_t *rgb565img)
+void pinetime_st7789_put_frame(const uint8_t *rgbimg)
 {
   static const uint8_t set_window[]=
   {
@@ -352,7 +378,7 @@ void pinetime_st7789_put_frame(const uint8_t *rgb565img)
   if(inited)
   {
     send_seq(set_window, sizeof(set_window));
-    spi_data_copy(rgb565img, (SCR_WIDTH*SCR_HEIGHT)*2);
+    spi_data_copy(rgbimg, (SCR_WIDTH*SCR_HEIGHT)*2);
   }
 }
 
@@ -372,19 +398,20 @@ void pinetime_st7789_stream_frame(next_chunk_cb_t next_chunk, int len)
   }
 }
 
-void pinetime_st7789_init(void)
+void pinetime_st7789_init(pinetime_st7789_pixel_format_t pixel_format)
 {
   if(!inited)
   {
     int st=0;
     st|=gpio_init();
     st|=spi_init();
-    if(st==0) inited=1;
+    if(st==0) inited=pixel_format;
     hal_gpio_write(LCD_RESET_PIN, 0);
     DELAY(100);
     hal_gpio_write(LCD_RESET_PIN, 1);
     DELAY(125);
-    send_seq(init_seq, sizeof(init_seq));
+    if(pixel_format==PINETIME_PXLFMT_RGB565) send_seq(init_seq_rgb565, sizeof(init_seq_rgb565));
+    if(pixel_format==PINETIME_PXLFMT_RGB444) send_seq(init_seq_rgb444, sizeof(init_seq_rgb444));
   }
 }
 
@@ -405,20 +432,20 @@ void pinetime_st7789_capabilities(struct pinetime_st7789_capabilities *cap)
     cap->pixel_width=PINETIME_ST7789_SCR_WIDTH;
     cap->pixel_height=PINETIME_ST7789_SCR_HEIGHT;
     cap->maxtransfer=PINETIME_ST7789_MAXTRANSFER;
-    cap->pixel_format=PINETIME_PXLFMT_RGB565;
+    cap->pixel_format=PINETIME_PXLFMT_RGB565 | PINETIME_PXLFMT_RGB444;
     cap->buffer_size=PINETIME_ST7789_BUFFER_SIZE;
   }
 }
 
-void pinetime_st7789_send_data(const uint8_t *rgb565buffer, int len)
+void pinetime_st7789_send_data(const uint8_t *rgbbuffer, int len)
 {
   if(inited)
   {
-    spi_data_nocopy(rgb565buffer, len);
+    spi_data_nocopy(rgbbuffer, len);
   }
 }
 
-void pinetime_st7789_put_icon(const uint8_t *rgb565buffer, int x, int y, int w, int h, int copytoram)
+void pinetime_st7789_put_icon(const uint8_t *rgbbuffer, int x, int y, int w, int h, int copytoram)
 {
   uint8_t set_window[]=
   {
@@ -430,8 +457,8 @@ void pinetime_st7789_put_icon(const uint8_t *rgb565buffer, int x, int y, int w, 
   if(inited)
   {
     send_seq(set_window, sizeof(set_window));
-    if(copytoram) spi_data_copy(rgb565buffer, w*h*2);
-    else spi_data_nocopy(rgb565buffer, w*h*2);
+    if(copytoram) spi_data_copy(rgbbuffer, w*h*2);
+    else spi_data_nocopy(rgbbuffer, w*h*2);
   }
 }
 
@@ -508,7 +535,7 @@ void pinetime_st7789_brightness(pinetime_st7789_brightness_t brightness)
 
 void pinetime_st7789_put_pixel_rgb565(int x, int y, uint16_t rgb565)
 {
-  uint8_t set_window[]=
+  uint8_t draw_pixel[]=
   {
     //        opcode	delay	parameters
     ST7789(OP_CASET,	0,	x>>8, x&0xff, x>>8, x&0xff ),
@@ -516,9 +543,25 @@ void pinetime_st7789_put_pixel_rgb565(int x, int y, uint16_t rgb565)
     ST7789(OP_RAMWR,    0,	rgb565>>8, rgb565&0xff),
   };
 
-  if(inited)
+  if(inited==PINETIME_PXLFMT_RGB565)
   {
-    send_seq(set_window, sizeof(set_window));
+    send_seq(draw_pixel, sizeof(draw_pixel));
+  }
+}
+
+void pinetime_st7789_put_pixel_rgb444(int x, int y, uint16_t rgb444)
+{
+  uint8_t draw_pixel[]=
+  {
+    //        opcode	delay	parameters
+    ST7789(OP_CASET,	0,	x>>8, x&0xff, x>>8, x&0xff ),
+    ST7789(OP_RASET,	0,	y>>8, y&0xff, y>>8, y&0xff ),
+    ST7789(OP_RAMWR,    0,	rgb444>>8, rgb444&0xf0, 0),
+  };
+
+  if(inited==PINETIME_PXLFMT_RGB444)
+  {
+    send_seq(draw_pixel, sizeof(draw_pixel));
   }
 }
 
@@ -634,6 +677,7 @@ void pinetime_st7789_clear(void)
 void pinetime_st7789_wait_for_transfer(void)
 {
   spi_wait();
+  hal_gpio_write(LCD_CHIP_SELECT_PIN, 1);
 }
 
 void pinetime_st7789_sleep(int en)
