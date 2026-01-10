@@ -152,7 +152,7 @@ static const uint8_t init_seq_rgb444[]=
   ST7789(OP_SWRESET,	200),
   ST7789(OP_CMD2EN,	0,	0x5a,0x69,0x02,0x01), 					/* C; C; C; EN(0) */
   ST7789(OP_SLPOUT,	200),
-  ST7789(OP_COLMOD,	0,	0x53),							/* RGBicf(65k) CICF(16bit) */
+  ST7789(OP_COLMOD,	0,	0x03),							/* RGBicf(65k) CICF(16bit) */
   ST7789(OP_MADCTL,	0,	0x00),							/* MY(t2b) MX(l2r) MV(n) ML(t2b) RGB(rgb) MH(l2r) */
   ST7789(OP_CASET,	0,	0x00, 0x00, (SCR_WIDTH-1)>>8, (SCR_WIDTH-1)&0xff ),	/* SCR_WIDTH */
   ST7789(OP_RASET,	0,	0x00, 0x00, (SCR_HEIGHT-1)>>8, (SCR_HEIGHT-1)&0xff ),	/* SCR_HEIGHT */
