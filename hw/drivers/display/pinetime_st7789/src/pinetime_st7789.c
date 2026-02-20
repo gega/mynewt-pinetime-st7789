@@ -630,7 +630,7 @@ void pinetime_st7789_draw_horiz_line(uint8_t r, uint8_t g, uint8_t b, int y, int
   {
     uint16_t col1=RGB_TO_RGB444(r,g,b);
     uint16_t col2=RGB_TO_RGB444(r,g,b);
-    uint8_t pat[3]={ (col1>>8)&0xff, 0xff&(col1|col2>>12), col2&0xff };
+    uint8_t pat[3]={ (col1>>8)&0xff, 0xff&(col1|col2>>12), (col2>>4)&0xff };
     int blen=MIN(sizeof(line_buf[0]),(3*(x1-x0))/2);
     for(int i=0; i<blen; i+=3)
     {
@@ -689,7 +689,7 @@ void pinetime_st7789_fill_rect(uint8_t r, uint8_t g, uint8_t b, int x, int y, in
     {
       uint16_t col1=RGB_TO_RGB444(r,g,b);
       uint16_t col2=RGB_TO_RGB444(r,g,b);
-      uint8_t pat[3]={ (col1>>8)&0xff, 0xff&(col1|col2>>12), col2&0xff };
+      uint8_t pat[3]={ (col1>>8)&0xff, 0xff&(col1|col2>>12), (col2>>4)&0xff };
       int blen=MIN(sizeof(line_buf[0]),(3*(w))/2);
       for(int i=0; i<blen; i+=3)
       {
