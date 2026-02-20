@@ -5,7 +5,7 @@ This is a minimal, efficient driver for the ST7789 display on the PineTime smart
 ## Features
 
 - No heap usage
-- Non-blocking SPI interface
+- Non-blocking (DMA) SPI interface
 - Flash-friendly with interleaved decompression support
 - Partial updates (great for UI icons or widgets)
 - Basic drawing primitives
