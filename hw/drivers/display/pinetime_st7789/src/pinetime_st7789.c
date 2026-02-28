@@ -115,7 +115,9 @@
 #define OP_NVMSET          0xfc        /* nvm setting command */
 #define OP_PROMACT         0xfe        /* program action command */
 
+#ifndef DELAY
 #define DELAY(ms) do { if((ms)>0) os_time_delay(((ms)*OS_TICKS_PER_SEC)/1000); } while(0)
+#endif
 
 #define SCR_WIDTH PINETIME_ST7789_SCR_WIDTH
 #define SCR_HEIGHT PINETIME_ST7789_SCR_HEIGHT
@@ -178,6 +180,7 @@ _Static_assert(PINETIME_ST7789_BUFFER_SIZE%2==0, "Internal buffer size should be
 static uint16_t line_buf[2][PINETIME_ST7789_BUFFER_SIZE/sizeof(uint16_t)]; /* should be PINETIME_ST7789_BUFFER_SIZE bytes */
 static volatile int lift_cs=0;
 static int sleep_mode;
+pinetime_st7789_pixel_format_t slp_pixel_format;
 
 
 static void txrx_cb(void *arg, int len)
@@ -412,13 +415,20 @@ void pinetime_st7789_init(pinetime_st7789_pixel_format_t pixel_format)
     DELAY(125);
     if(pixel_format==PINETIME_PXLFMT_RGB565) send_seq(init_seq_rgb565, sizeof(init_seq_rgb565));
     if(pixel_format==PINETIME_PXLFMT_RGB444) send_seq(init_seq_rgb444, sizeof(init_seq_rgb444));
+    slp_pixel_format=pixel_format;
   }
 }
 
 void pinetime_st7789_deinit(void)
 {
+  static const uint8_t sleep[]=
+  {
+    //        opcode	delay	parameters
+    ST7789(OP_SLPIN,	126),
+  };
   if(inited)
   {
+    send_seq(sleep, sizeof(sleep));
     spi_deinit();
     gpio_deinit();
     inited=0;
@@ -740,13 +750,16 @@ void pinetime_st7789_sleep(int en)
     if(en)
     {
       // sleep
-      DELAY(120);
       send_seq(sleep, sizeof(sleep));
+      sleep_mode=1;
+      hal_gpio_deinit(LCD_WRITE_PIN);
     }
     else
     {
       // wakeup
+      hal_gpio_init_out(LCD_WRITE_PIN, 1);
       send_seq(wakeup, sizeof(wakeup));
+      sleep_mode=0;
     }
   }
 }
