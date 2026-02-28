@@ -343,10 +343,12 @@ static int gpio_init(void)
   
   ret|=hal_gpio_init_out(LCD_WRITE_PIN, 1);
   ret|=hal_gpio_init_out(LCD_RESET_PIN, 1);
+  #if MYNEWT_VAL(ST7789_BRIGHTNESS) != 0
   ret|=hal_gpio_init_out(LCD_BACKLIGHT_LOW_PIN, 0);
   ret|=hal_gpio_init_out(LCD_BACKLIGHT_MED_PIN, 0);
   ret|=hal_gpio_init_out(LCD_BACKLIGHT_HIGH_PIN, 0);
-  
+  #endif
+
   return(ret);
 }
 
@@ -523,6 +525,7 @@ static uint8_t *ncc(uint8_t *buf, int *chunk, int remaining_len)
   return(ret);
 }
 
+#if MYNEWT_VAL(ST7789_BRIGHTNESS) != 0
 void pinetime_st7789_brightness(pinetime_st7789_brightness_t brightness)
 {
   static const int leds[][3]=
@@ -542,6 +545,9 @@ void pinetime_st7789_brightness(pinetime_st7789_brightness_t brightness)
     hal_gpio_write(backlight_pins[i], leds[brightness][i]);
   }
 }
+#else
+void pinetime_st7789_brightness(pinetime_st7789_brightness_t brightness) {}
+#endif
 
 void pinetime_st7789_put_pixel_rgb565(int x, int y, uint16_t rgb565)
 {
