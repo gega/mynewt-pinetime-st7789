@@ -250,7 +250,7 @@ static int spi_data_copy(const uint8_t *buf, int len)
       bf=(uint8_t *)line_buf[bsel];
       memcpy(bf, buf, chunk);
       os_sem_pend(&mu_busy, OS_TIMEOUT_NEVER);
-      if(i>=nt) lift_cs=1;
+      if(i>=nt-1) lift_cs=1;
       ret|=hal_spi_txrx_noblock(LCD_SPI_BUS, bf, NULL, chunk);
       buf+=chunk;
       chunk=PINETIME_ST7789_BUFFER_SIZE;
@@ -343,11 +343,9 @@ static int gpio_init(void)
   
   ret|=hal_gpio_init_out(LCD_WRITE_PIN, 1);
   ret|=hal_gpio_init_out(LCD_RESET_PIN, 1);
-  #if MYNEWT_VAL(ST7789_BRIGHTNESS) != 0
   ret|=hal_gpio_init_out(LCD_BACKLIGHT_LOW_PIN, 0);
   ret|=hal_gpio_init_out(LCD_BACKLIGHT_MED_PIN, 0);
   ret|=hal_gpio_init_out(LCD_BACKLIGHT_HIGH_PIN, 0);
-  #endif
 
   return(ret);
 }
