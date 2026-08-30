@@ -343,9 +343,11 @@ static int gpio_init(void)
   
   ret|=hal_gpio_init_out(LCD_WRITE_PIN, 1);
   ret|=hal_gpio_init_out(LCD_RESET_PIN, 1);
+  #if MYNEWT_VAL(ST7789_BRIGHTNESS) != 0
   ret|=hal_gpio_init_out(LCD_BACKLIGHT_LOW_PIN, 0);
   ret|=hal_gpio_init_out(LCD_BACKLIGHT_MED_PIN, 0);
   ret|=hal_gpio_init_out(LCD_BACKLIGHT_HIGH_PIN, 0);
+  #endif
 
   return(ret);
 }
@@ -354,9 +356,11 @@ static void gpio_deinit(void)
 {
   hal_gpio_deinit(LCD_WRITE_PIN);
   hal_gpio_deinit(LCD_RESET_PIN);
+  #if MYNEWT_VAL(ST7789_BRIGHTNESS) != 0
   hal_gpio_deinit(LCD_BACKLIGHT_LOW_PIN);
   hal_gpio_deinit(LCD_BACKLIGHT_MED_PIN);
   hal_gpio_deinit(LCD_BACKLIGHT_HIGH_PIN);
+  #endif
 }
 
 static void send_seq(const uint8_t *seq, int len)
